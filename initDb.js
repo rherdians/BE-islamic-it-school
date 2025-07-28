@@ -56,7 +56,21 @@ connection.connect((err) => {
       connection.query(createAdminTable, (err) => {
         if (err) throw err;
         console.log("Table 'admin_users' checked/created.");
+      });
 
+      // 5. CREATE TABLE referral_codes
+      const createReferralCodeTable = `
+        CREATE TABLE IF NOT EXISTS referral_codes (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          kode_referal VARCHAR(100) NOT NULL UNIQUE,
+          username VARCHAR(100) NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `;
+
+      connection.query(createReferralCodeTable, (err) => {
+        if (err) throw err;
+        console.log("Table 'referral_codes' checked/created.");
         connection.end();
       });
     });
