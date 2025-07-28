@@ -21,8 +21,8 @@ connection.connect((err) => {
     connection.changeUser({ database: process.env.DB_NAME }, (err) => {
       if (err) throw err;
 
-      // 3. CREATE TABLE referral_logs jika belum ada
-      const createTableSql = `
+      // 3. CREATE TABLE referral_logs
+      const createReferralTable = `
         CREATE TABLE IF NOT EXISTS referral_logs (
           id INT AUTO_INCREMENT PRIMARY KEY,
           book_title VARCHAR(255),
@@ -31,13 +31,31 @@ connection.connect((err) => {
           ip_address VARCHAR(100),
           whatsapp_click_time DATETIME DEFAULT NULL,
           status ENUM('belum beli', 'beli') DEFAULT 'belum beli',
+          nama_pembeli VARCHAR(255),
+          alamat TEXT,
+          nomor_pembeli VARCHAR(20),
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
       `;
 
-      connection.query(createTableSql, (err) => {
+      connection.query(createReferralTable, (err) => {
         if (err) throw err;
         console.log("Table 'referral_logs' checked/created.");
+      });
+
+      // 4. CREATE TABLE admin_users
+      const createAdminTable = `
+        CREATE TABLE IF NOT EXISTS admin_users (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          username VARCHAR(100) NOT NULL UNIQUE,
+          password VARCHAR(255) NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `;
+
+      connection.query(createAdminTable, (err) => {
+        if (err) throw err;
+        console.log("Table 'admin_users' checked/created.");
 
         connection.end();
       });

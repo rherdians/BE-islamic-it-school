@@ -15,15 +15,15 @@ app.use('/api/auth', authRoutes);
 
 // ✅ POST /api/log-click
 app.post('/api/log-click', (req, res) => {
-  const { book_title, referral_code, user_agent } = req.body;
+  const { book_title, referral_code, user_agent, nama_pembeli, alamat, nomor_pembeli } = req.body;
   const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
 
   const sql = `
-    INSERT INTO referral_logs (book_title, referral_code, user_agent, ip_address, status)
-    VALUES (?, ?, ?, ?, 'belum beli')
+    INSERT INTO referral_logs (book_title, referral_code, user_agent, ip_address, status, nama_pembeli, alamat, nomor_pembeli)
+    VALUES (?, ?, ?, ?, 'belum beli', ?, ?, ?)
   `;
 
-  db.query(sql, [book_title, referral_code, user_agent, ip], (err, result) => {
+  db.query(sql, [book_title, referral_code, user_agent, ip, nama_pembeli, alamat, nomor_pembeli], (err, result) => {
     if (err) {
       console.error(err);
       return res.status(500).json({ error: 'Database error' });
@@ -32,10 +32,10 @@ app.post('/api/log-click', (req, res) => {
   });
 });
 
-// ✅ GET /api/logs
 app.get('/api/logs', (req, res) => {
   const sql = `
-    SELECT id, book_title, referral_code, user_agent, ip_address, whatsapp_click_time, status, created_at
+    SELECT id, book_title, referral_code, user_agent, ip_address, whatsapp_click_time, status,
+           nama_pembeli, alamat, nomor_pembeli, created_at
     FROM referral_logs
     ORDER BY created_at DESC
   `;
@@ -49,6 +49,7 @@ app.get('/api/logs', (req, res) => {
     res.status(200).json(results);
   });
 });
+
 
 // ✅ PATCH /api/logs/:id → update status beli/belum
 app.patch('/api/logs/:id', (req, res) => {
