@@ -60,13 +60,14 @@ connection.connect((err) => {
 
       // 5. CREATE TABLE referral_codes
       const createReferralCodeTable = `
-        CREATE TABLE IF NOT EXISTS referral_codes (
-          id INT AUTO_INCREMENT PRIMARY KEY,
-          kode_referal VARCHAR(100) NOT NULL UNIQUE,
-          username VARCHAR(100) NOT NULL,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-      `;
+          CREATE TABLE IF NOT EXISTS referral_codes (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            kode_referal VARCHAR(100) NOT NULL UNIQUE,
+            username VARCHAR(100) NOT NULL,
+            \`usage\` INT DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          )
+        `;
 
       connection.query(createReferralCodeTable, (err) => {
         if (err) throw err;

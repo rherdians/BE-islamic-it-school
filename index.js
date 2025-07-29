@@ -3,6 +3,7 @@ const cors = require('cors');
 const db = require('./db');
 require('dotenv').config();
 require('./initDb');
+const tripayRoutes = require('./routes/tripay');
 
 const authRoutes = require('./routes/authRoutes');
 const referralRoutes = require('./routes/referalRoutes');
@@ -14,6 +15,7 @@ app.use(express.json());
 // Route login & admin auth
 app.use('/api/auth', authRoutes);
 app.use('/api/referal', referralRoutes);
+app.use('/api/midtrans', tripayRoutes);
 // ✅ POST /api/log-click
 app.post('/api/log-click', (req, res) => {
   const { book_title, referral_code, user_agent, nama_pembeli, alamat, nomor_pembeli, harga } = req.body;

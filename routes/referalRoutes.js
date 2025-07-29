@@ -32,18 +32,28 @@ router.post('/', async (req, res) => {
   }
 
   try {
-    const [existing] = await pool.query('SELECT id FROM referral_codes WHERE kode_referal = ?', [kode_referal]);
+    const [existing] = await pool.query(
+      'SELECT id FROM referral_codes WHERE kode_referal = ?',
+      [kode_referal]
+    );
+
     if (existing.length > 0) {
       return res.status(409).json({ message: 'Kode referal sudah digunakan' });
     }
 
-    await pool.query('INSERT INTO referral_codes (kode_referal, username) VALUES (?, ?)', [kode_referal, username]);
+    // Menambahkan usage = 0 secara eksplisit
+    await pool.query(
+      'INSERT INTO referral_codes (kode_referal, username, `usage`) VALUES (?, ?, ?)',
+      [kode_referal, username, 0]
+    );
+
     res.status(201).json({ message: 'Kode referal berhasil ditambahkan' });
   } catch (error) {
     console.error('POST referral_codes error:', error);
     res.status(500).json({ message: 'Gagal menyimpan kode referal' });
   }
 });
+
 router.delete('/:id', async (req, res) => {
   const { id } = req.params;
 
@@ -60,5 +70,33 @@ router.delete('/:id', async (req, res) => {
     res.status(500).json({ message: 'Gagal menghapus kode referal' });
   }
 });
+
+router.put('/use/:kode_referal', async (req, res) => {
+  const { kode_referal } = req.params;
+
+  try {
+    // Cek apakah kode referal ada
+    const [result] = await pool.query(
+      'SELECT id FROM referral_codes WHERE kode_referal = ?',
+      [kode_referal]
+    );
+
+    if (result.length === 0) {
+      return res.status(404).json({ message: 'Kode referal tidak ditemukan' });
+    }
+
+    // Tambah usage +1
+    await pool.query(
+      'UPDATE referral_codes SET `usage` = `usage` + 1 WHERE kode_referal = ?',
+      [kode_referal]
+    );
+
+    res.status(200).json({ message: 'Usage berhasil ditambahkan' });
+  } catch (error) {
+    console.error('PUT /use/:kode_referal error:', error);
+    res.status(500).json({ message: 'Gagal menambah usage' });
+  }
+});
+
 
 module.exports = router;
