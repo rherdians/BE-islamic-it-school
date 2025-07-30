@@ -16,29 +16,62 @@ app.use(express.json());
 app.use('/api/auth', authRoutes);
 app.use('/api/referal', referralRoutes);
 app.use('/api/midtrans', tripayRoutes);
-// ✅ POST /api/log-click
+
+// ✅ POST /api/log-click - Create log awal
 app.post('/api/log-click', (req, res) => {
-  const { book_title, referral_code, user_agent, nama_pembeli, alamat, nomor_pembeli, harga } = req.body;
+  const { book_title, referral_code, user_agent, nama_pembeli, alamat, nomor_pembeli, harga, harga_asli, diskon_amount } = req.body;
   const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
 
   const sql = `
-    INSERT INTO referral_logs (book_title, referral_code, user_agent, ip_address, status, nama_pembeli, alamat, nomor_pembeli, harga)
-    VALUES (?, ?, ?, ?, 'belum beli', ?, ?, ?, ?)
+    INSERT INTO referral_logs (book_title, referral_code, user_agent, ip_address, status, nama_pembeli, alamat, nomor_pembeli, harga, harga_asli, diskon_amount, created_at)
+    VALUES (?, ?, ?, ?, 'belum beli', ?, ?, ?, ?, ?, ?, NOW())
   `;
 
-  db.query(sql, [book_title, referral_code, user_agent, ip, nama_pembeli, alamat, nomor_pembeli, harga], (err, result) => {
+  db.query(sql, [book_title, referral_code, user_agent, ip, nama_pembeli, alamat, nomor_pembeli, harga, harga_asli, diskon_amount], (err, result) => {
     if (err) {
-      console.error(err);
+      console.error('Error inserting log:', err);
       return res.status(500).json({ error: 'Database error' });
     }
-    res.status(200).json({ message: 'Click logged successfully' });
+    res.status(200).json({ 
+      message: 'Click logged successfully',
+      id: result.insertId
+    });
   });
 });
 
+// ✅ PUT /api/log-click/:id/order-id - Update order_id setelah dapat dari Midtrans
+app.put('/api/log-click/:id/order-id', (req, res) => {
+  const logId = req.params.id;
+  const { order_id } = req.body;
+
+  if (!order_id) {
+    return res.status(400).json({ error: 'order_id is required' });
+  }
+
+  const sql = `UPDATE referral_logs SET order_id = ? WHERE id = ?`;
+
+  db.query(sql, [order_id, logId], (err, result) => {
+    if (err) {
+      console.error('Error updating order_id:', err);
+      return res.status(500).json({ error: 'Database error' });
+    }
+    
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: 'Log not found' });
+    }
+
+    res.status(200).json({ 
+      message: 'Order ID updated successfully',
+      order_id: order_id 
+    });
+  });
+});
+
+// ✅ GET /api/logs - Get all logs
 app.get('/api/logs', (req, res) => {
   const sql = `
-    SELECT id, book_title, referral_code, user_agent, ip_address, whatsapp_click_time, status,
-           nama_pembeli, alamat, nomor_pembeli, harga, created_at
+    SELECT id, book_title, referral_code, order_id, user_agent, ip_address, whatsapp_click_time, status,
+           nama_pembeli, alamat, nomor_pembeli, harga, harga_asli, diskon_amount, created_at
     FROM referral_logs
     ORDER BY created_at DESC
   `;
@@ -53,22 +86,52 @@ app.get('/api/logs', (req, res) => {
   });
 });
 
-
-// ✅ PATCH /api/logs/:id → update status beli/belum
+// ✅ PERBAIKAN: TARUH ENDPOINTS SPESIFIK SEBELUM ENDPOINT DENGAN PARAMETER DINAMIS
 app.patch('/api/logs/:id', (req, res) => {
   const { id } = req.params;
-  const { status } = req.body;
+  const { status, order_id, payment_type, paid_at, failure_reason } = req.body;
 
-  const allowed = ['beli', 'belum beli'];
+  // Validasi bahwa id adalah angka
+  if (!/^\d+$/.test(id)) {
+    return res.status(400).json({ error: 'ID must be numeric' });
+  }
+
+  const allowed = ['beli', 'belum beli', 'pending', 'gagal', 'challenge'];
   if (!allowed.includes(status)) {
     return res.status(400).json({ error: 'Status tidak valid' });
   }
 
-  const sql = `UPDATE referral_logs SET status = ? WHERE id = ?`;
+  console.log('Updating status by log ID:', id, 'to status:', status);
+  
+  // Build dynamic SQL
+  let setClause = 'status = ?';
+  let values = [status];
+  
+  if (order_id) {
+    setClause += ', order_id = ?';
+    values.push(order_id);
+  }
+  if (payment_type) {
+    setClause += ', payment_type = ?';
+    values.push(payment_type);
+  }
+  if (paid_at) {
+    setClause += ', paid_at = ?';
+    values.push(paid_at);
+  }
+  if (failure_reason) {
+    setClause += ', failure_reason = ?';
+    values.push(failure_reason);
+  }
+  
+  setClause += ', updated_at = NOW()';
+  values.push(parseInt(id));
+  
+  const sql = `UPDATE referral_logs SET ${setClause} WHERE id = ?`;
 
-  db.query(sql, [status, id], (err, result) => {
+  db.query(sql, values, (err, result) => {
     if (err) {
-      console.error('Error updating status:', err);
+      console.error('Error updating status by ID:', err);
       return res.status(500).json({ error: 'Database error' });
     }
 
@@ -76,13 +139,13 @@ app.patch('/api/logs/:id', (req, res) => {
       return res.status(404).json({ error: 'Log tidak ditemukan' });
     }
 
-    res.status(200).json({ message: 'Status berhasil diperbarui' });
+    console.log('Status updated successfully for log ID:', id);
+    res.status(200).json({ 
+      message: 'Status berhasil diperbarui',
+      affected_rows: result.affectedRows 
+    });
   });
 });
-
-// GET semua referral codes
-
-
 // ✅ Start server
 app.listen(process.env.PORT, () => {
   console.log(`Server running on port ${process.env.PORT}`);

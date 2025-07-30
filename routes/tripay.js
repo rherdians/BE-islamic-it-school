@@ -228,6 +228,7 @@ router.post('/create-transaction', async (req, res) => {
 });
 
 // === Midtrans Notification/Webhook Handler ===
+// 1. Fix the webhook handler in tripayRoutes.js
 router.post('/notification', async (req, res) => {
   try {
     const notification = req.body;
@@ -241,9 +242,7 @@ router.post('/notification', async (req, res) => {
       transaction_status,
       fraud_status,
       payment_type,
-      transaction_time,
-      custom_field1: referral_code,
-      custom_field2: log_id
+      transaction_time
     } = notification;
 
     // Verifikasi signature
@@ -263,34 +262,54 @@ router.post('/notification', async (req, res) => {
 
     console.log(`Payment status: ${transaction_status} for order_id: ${order_id}`);
 
-    // Handle status pembayaran berdasarkan Midtrans documentation
+    // Extract log_id from order_id format: ORDER-timestamp-log_id
+    const logIdMatch = order_id.match(/ORDER-\d+-(\d+)$/);
+    const logId = logIdMatch ? logIdMatch[1] : null;
+
+    if (!logId) {
+      console.error('Cannot extract log_id from order_id:', order_id);
+      return res.status(200).json({ 
+        success: false, 
+        message: 'Invalid order_id format' 
+      });
+    }
+
+    // Handle status pembayaran
+    let newStatus = 'belum beli';
+    let updateData = {
+      order_id: order_id,
+      payment_type: payment_type,
+      updated_at: new Date()
+    };
+
     if (transaction_status === 'capture') {
       if (fraud_status === 'challenge') {
-        // Transaction is challenged by FDS
-        console.log('Transaction challenged:', order_id);
+        newStatus = 'challenge';
       } else if (fraud_status === 'accept') {
-        // Transaction success
-        await handleSuccessfulPayment(order_id, log_id, notification);
+        newStatus = 'beli';
+        updateData.paid_at = transaction_time;
       }
     } else if (transaction_status === 'settlement') {
-      // Transaction success
-      await handleSuccessfulPayment(order_id, log_id, notification);
+      newStatus = 'beli';
+      updateData.paid_at = transaction_time;
     } else if (transaction_status === 'cancel' || 
                transaction_status === 'deny' || 
                transaction_status === 'expire') {
-      // Transaction failed/cancelled
-      console.log(`Transaction ${transaction_status}:`, order_id);
-      await handleFailedPayment(order_id, log_id, transaction_status);
+      newStatus = 'gagal';
+      updateData.failure_reason = transaction_status;
     } else if (transaction_status === 'pending') {
-      // Transaction pending
-      console.log('Transaction pending:', order_id);
-      await handlePendingPayment(order_id, log_id, notification);
+      newStatus = 'pending';
     }
+
+    // Update database menggunakan log_id (bukan order_id)
+    await updateLogStatus(logId, newStatus, updateData);
 
     // WAJIB: Selalu balas dengan 200 OK ke Midtrans
     res.status(200).json({ 
       success: true,
-      message: 'Notification processed'
+      message: 'Notification processed',
+      log_id: logId,
+      status: newStatus
     });
 
   } catch (error) {
@@ -303,6 +322,47 @@ router.post('/notification', async (req, res) => {
     });
   }
 });
+
+// Helper function untuk update log status
+async function updateLogStatus(logId, status, additionalData = {}) {
+  return new Promise((resolve, reject) => {
+    const db = require('../db'); // Adjust path as needed
+    
+    // Build dynamic SQL based on additional data
+    let setClause = 'status = ?';
+    let values = [status];
+    
+    Object.keys(additionalData).forEach(key => {
+      if (key !== 'updated_at') {
+        setClause += `, ${key} = ?`;
+        values.push(additionalData[key]);
+      }
+    });
+    
+    setClause += ', updated_at = NOW()';
+    values.push(parseInt(logId));
+    
+    const sql = `UPDATE referral_logs SET ${setClause} WHERE id = ?`;
+    
+    db.query(sql, values, (err, result) => {
+      if (err) {
+        console.error('Database update error:', err);
+        reject(err);
+      } else if (result.affectedRows === 0) {
+        console.warn('No rows updated for log_id:', logId);
+        reject(new Error('Log not found'));
+      } else {
+        console.log('Log status updated successfully:', {
+          log_id: logId,
+          status: status,
+          affected_rows: result.affectedRows
+        });
+        resolve(result);
+      }
+    });
+  });
+}
+
 
 // Handle successful payment
 async function handleSuccessfulPayment(orderId, logId, notification) {
