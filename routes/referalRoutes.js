@@ -21,8 +21,6 @@ const pool = mysql.createPool({
   password: process.env.DB_PASSWORD,
   database: process.env.DB_NAME,
   connectionLimit: 10,
-  acquireTimeout: 60000,
-  timeout: 60000,
 });
 
 // Test koneksi
