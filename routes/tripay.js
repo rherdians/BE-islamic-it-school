@@ -107,14 +107,14 @@ router.post('/create-transaction', async (req, res) => {
         phone: formattedPhone,
         billing_address: {
           first_name: nama.trim(),
-          address: alamat,
+          address: alamat || "Not provided",
           city: "Jakarta",
           postal_code: "12345",
           country_code: "IDN"
         },
         shipping_address: {
           first_name: nama.trim(),
-          address: alamat,
+          address: alamat || "Not provided",
           city: "Jakarta",
           postal_code: "12345",
           country_code: "IDN"
@@ -358,111 +358,17 @@ async function updateLogStatus(logId, status, additionalData = {}) {
   });
 }
 
-// Handle successful payment
-async function handleSuccessfulPayment(orderId, logId, notification) {
-  try {
-    if (logId) {
-      // Update status log di database
-      const updateResponse = await axios.patch(
-        `http://localhost:${process.env.PORT || 5000}/api/logs/${logId}`, 
-        {
-          status: 'beli',
-          payment_reference: orderId,
-          paid_at: notification.transaction_time,
-          payment_type: notification.payment_type,
-          gross_amount: notification.gross_amount
-        },
-        {
-          timeout: 10000,
-          headers: {
-            'Content-Type': 'application/json'
-          }
-        }
-      );
-
-      console.log('Log updated successfully:', {
-        log_id: logId,
-        status: 'beli',
-        payment_reference: orderId
-      });
-
-    } else {
-      console.warn('No log_id found in order_id:', orderId);
-    }
-
-  } catch (updateError) {
-    console.error('Failed to update log status:', {
-      error: updateError.message,
-      response: updateError.response?.data,
-      order_id: orderId
-    });
-  }
-}
-
-// Handle failed payment
-async function handleFailedPayment(orderId, logId, status) {
-  try {
-    if (logId) {
-      await axios.patch(
-        `http://localhost:${process.env.PORT || 5000}/api/logs/${logId}`, 
-        {
-          status: 'failed',
-          payment_reference: orderId,
-          failure_reason: status
-        },
-        {
-          timeout: 10000,
-          headers: {
-            'Content-Type': 'application/json'
-          }
-        }
-      );
-
-      console.log('Log updated for failed payment:', {
-        log_id: logId,
-        status: 'failed',
-        order_id: orderId
-      });
-    }
-  } catch (error) {
-    console.error('Failed to update failed payment status:', error.message);
-  }
-}
-
-// Handle pending payment
-async function handlePendingPayment(orderId, logId, notification) {
-  try {
-    if (logId) {
-      await axios.patch(
-        `http://localhost:${process.env.PORT || 5000}/api/logs/${logId}`, 
-        {
-          status: 'pending',
-          payment_reference: orderId,
-          payment_type: notification.payment_type
-        },
-        {
-          timeout: 10000,
-          headers: {
-            'Content-Type': 'application/json'
-          }
-        }
-      );
-
-      console.log('Log updated for pending payment:', {
-        log_id: logId,
-        status: 'pending',
-        order_id: orderId
-      });
-    }
-  } catch (error) {
-    console.error('Failed to update pending payment status:', error.message);
-  }
-}
-
 // Endpoint untuk cek status transaksi (opsional)
 router.get('/transaction-status/:order_id', async (req, res) => {
   try {
     const { order_id } = req.params;
+    
+    if (!order_id) {
+      return res.status(400).json({
+        success: false,
+        message: 'Order ID diperlukan'
+      });
+    }
     
     const midtransRes = await axios.get(
       `${MIDTRANS_BASE_URL}/${order_id}/status`,
@@ -531,61 +437,7 @@ router.post('/cancel-transaction', async (req, res) => {
   }
 });
 
-router.post('/midtrans/callback', express.json(), async (req, res) => {
-  const body = req.body;
-
-  const {
-    order_id,
-    status_code,
-    gross_amount,
-    signature_key,
-    transaction_status,
-    payment_type,
-    fraud_status
-  } = body;
-
-  // Signature validation
-  const expectedSignature = crypto
-    .createHash('sha512')
-    .update(order_id + status_code + gross_amount + process.env.MIDTRANS_SERVER_KEY)
-    .digest('hex');
-
-  if (expectedSignature !== signature_key) {
-    return res.status(403).json({ message: 'Invalid signature' });
-  }
-
-  try {
-    // Ubah status di DB berdasarkan status transaksi Midtrans
-    let newStatus = 'pending';
-
-    if (transaction_status === 'capture' && payment_type === 'credit_card') {
-      if (fraud_status === 'challenge') newStatus = 'challenge';
-      else newStatus = 'beli';
-    } else if (transaction_status === 'settlement') {
-      newStatus = 'beli';
-    } else if (transaction_status === 'pending') {
-      newStatus = 'pending';
-    } else if (
-      transaction_status === 'cancel' ||
-      transaction_status === 'deny' ||
-      transaction_status === 'expire'
-    ) {
-      newStatus = 'gagal';
-    }
-
-    // Update ke database (asumsi order_id = ID log_pembelian)
-    await pool.query(
-      'UPDATE log_pembelian SET status = ?, updated_at = NOW() WHERE id = ?',
-      [newStatus, order_id]
-    );
-
-    console.log(`Status order ${order_id} diperbarui menjadi ${newStatus}`);
-    res.status(200).json({ message: 'Webhook processed' });
-
-  } catch (error) {
-    console.error('Webhook error:', error);
-    res.status(500).json({ message: 'Internal server error' });
-  }
-});
+// ✅ PERBAIKAN: Hapus duplicate callback handler yang bermasalah
+// Router ini sudah diganti dengan /notification endpoint di atas
 
 module.exports = router;
