@@ -13,13 +13,11 @@ requiredEnvVars.forEach(envVar => {
   }
 });
 
-// Midtrans configuration
+// Midtrans configuration - PRODUCTION
 const MIDTRANS_SERVER_KEY = process.env.MIDTRANS_SERVER_KEY;
 const MIDTRANS_CLIENT_KEY = process.env.MIDTRANS_CLIENT_KEY;
-const IS_PRODUCTION = process.env.NODE_ENV === 'production';
-const MIDTRANS_BASE_URL = IS_PRODUCTION 
-  ? 'https://api.midtrans.com/v2' 
-  : 'https://api.sandbox.midtrans.com/v2';
+const IS_PRODUCTION = true; // Force production mode
+const MIDTRANS_BASE_URL = 'https://api.midtrans.com/v2'; // Production URL
 
 // Fungsi validasi email sederhana
 function isValidEmail(email) {
@@ -158,16 +156,14 @@ router.post('/create-transaction', async (req, res) => {
       }
     };
 
-    console.log('Creating Midtrans Snap transaction:', {
+    console.log('Creating Midtrans Snap transaction (PRODUCTION):', {
       order_id: orderId,
       amount,
       customer: nama
     });
 
-    // Gunakan endpoint /snap/v1/transactions untuk Snap Preference
-    const snapUrl = IS_PRODUCTION 
-      ? 'https://app.midtrans.com/snap/v1/transactions'
-      : 'https://app.sandbox.midtrans.com/snap/v1/transactions';
+    // Production Snap URL
+    const snapUrl = 'https://app.midtrans.com/snap/v1/transactions';
 
     const midtransRes = await axios.post(snapUrl, payload, {
       headers: {
@@ -179,7 +175,7 @@ router.post('/create-transaction', async (req, res) => {
     });
 
     if (midtransRes.data && midtransRes.data.token) {
-      console.log('Snap transaction created successfully:', orderId);
+      console.log('Snap transaction created successfully (PRODUCTION):', orderId);
       res.json({
         success: true,
         order_id: orderId,
@@ -215,7 +211,7 @@ router.post('/create-transaction', async (req, res) => {
       errorMessage = error.response.data?.status_message || 'Data tidak valid';
       statusCode = 400;
     } else if (error.response?.status === 401) {
-      errorMessage = 'API Key tidak valid';
+      errorMessage = 'API Key tidak valid - pastikan menggunakan production keys';
       statusCode = 401;
     }
 
@@ -228,11 +224,10 @@ router.post('/create-transaction', async (req, res) => {
 });
 
 // === Midtrans Notification/Webhook Handler ===
-// 1. Fix the webhook handler in tripayRoutes.js
 router.post('/notification', async (req, res) => {
   try {
     const notification = req.body;
-    console.log('Midtrans notification received:', notification);
+    console.log('Midtrans notification received (PRODUCTION):', notification);
 
     const {
       order_id,
@@ -362,7 +357,6 @@ async function updateLogStatus(logId, status, additionalData = {}) {
     });
   });
 }
-
 
 // Handle successful payment
 async function handleSuccessfulPayment(orderId, logId, notification) {
